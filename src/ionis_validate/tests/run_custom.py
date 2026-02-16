@@ -20,13 +20,14 @@ JSON format:
       {
         "tx_grid": "DN26", "rx_grid": "PM95", "band": "20m",
         "hour": 6, "month": 12, "label": "KI7MT to JA",
-        "expect_open": true
+        "expect_open": true, "mode": "CW"
       }
     ]
   }
 
 Per-path overrides for sfi/kp/hour/month take precedence over top-level
-"conditions" defaults. Optional "expect_open" (bool) triggers pass/fail.
+"conditions" defaults. Optional "expect_open" (bool) triggers pass/fail
+against the specified "mode" threshold (default: WSPR).
 """
 
 import argparse
@@ -48,7 +49,6 @@ from ionis_validate.model import (
 SIGMA_TO_DB = 6.7
 WSPR_MEAN_DB = -17.53
 WSPR_STD_DB = 6.7
-PATH_OPEN_THRESHOLD_SIGMA = -2.5  # sigma threshold for "path open"
 
 # Mode decode thresholds (dB)
 MODE_THRESHOLDS_DB = {
@@ -59,9 +59,28 @@ MODE_THRESHOLDS_DB = {
     "SSB":    3.0,
 }
 
+# Modes shown as inline columns (RTTY omitted from compact table)
+DISPLAY_MODES = ["WSPR", "FT8", "CW", "SSB"]
+
+# Table row format
+ROW_FMT = (
+    "    {n:>3s}  {path:<13s}  {band:<4s}"
+    "  {db:>6s}  {km:>7s}"
+    "  {sfi:>3s}  {kp:>3s}  {hour:>4s}  {mon:>3s}"
+    "  {wspr:>4s}  {ft8:>4s}  {cw:>4s}  {ssb:>4s}"
+    "  {result:>6s}"
+)
+
 
 def sigma_to_approx_db(sigma):
     return sigma * WSPR_STD_DB + WSPR_MEAN_DB
+
+
+def format_kp(kp):
+    """Format Kp: integer if whole number, one decimal otherwise."""
+    if kp == int(kp):
+        return str(int(kp))
+    return f"{kp:.1f}"
 
 
 def main():
@@ -101,20 +120,30 @@ def main():
     print("  IONIS V20 — Custom Path Tests")
     print("=" * 70)
     print(f"\n  {description}")
-    if defaults:
-        parts = [f"{k}={v}" for k, v in defaults.items()]
-        print(f"  Default conditions: {', '.join(parts)}")
-    print(f"  Paths: {len(paths)}")
     print(f"  Device: {device}")
     print()
 
+    # Table header
+    hdr = ROW_FMT.format(
+        n="#", path="Path", band="Band", db="dB", km="km",
+        sfi="SFI", kp="Kp", hour="Hour", mon="Mon",
+        wspr="WSPR", ft8="FT8", cw="CW", ssb="SSB",
+        result="Result",
+    )
+    print(hdr)
+    sep_width = len(hdr)
+    print(f"  {'─' * (sep_width - 2)}")
+
     # Run predictions
-    results = []
+    pass_count = 0
+    fail_count = 0
+    tested_modes = set()
+
     for i, p in enumerate(paths):
-        tx_grid = p["tx_grid"]
-        rx_grid = p["rx_grid"]
+        tx_grid = p["tx_grid"].upper()
+        rx_grid = p["rx_grid"].upper()
         band = p["band"]
-        label = p.get("label", f"{tx_grid}->{rx_grid} {band}")
+        path_str = f"{tx_grid} > {rx_grid}"
 
         # Per-path overrides or defaults
         sfi = p.get("sfi", defaults.get("sfi", 150))
@@ -122,10 +151,22 @@ def main():
         hour = p.get("hour", defaults.get("hour", 12))
         month = p.get("month", defaults.get("month", 6))
         expect_open = p.get("expect_open", None)
+        test_mode = p.get("mode", "WSPR").upper()
+
+        # Validate mode
+        if test_mode not in MODE_THRESHOLDS_DB:
+            print(f"  SKIP: Unknown mode '{test_mode}' for path #{i+1}")
+            continue
 
         if band not in BAND_FREQ_HZ:
-            print(f"  SKIP: Unknown band '{band}' for path '{label}'")
-            results.append((label, None, None, None, "SKIP"))
+            print(ROW_FMT.format(
+                n=str(i + 1), path=path_str, band=band,
+                db="—", km="—",
+                sfi=f"{sfi:.0f}", kp=format_kp(kp),
+                hour=str(hour), mon=str(month),
+                wspr="—", ft8="—", cw="—", ssb="—",
+                result="SKIP",
+            ))
             continue
 
         tx_lat, tx_lon = grid4_to_latlon(tx_grid)
@@ -143,56 +184,52 @@ def main():
             snr_sigma = model(x).item()
 
         snr_db = sigma_to_approx_db(snr_sigma)
-        is_open = snr_sigma > PATH_OPEN_THRESHOLD_SIGMA
 
-        # Determine status
+        # Mode verdicts for display columns
+        mode_cols = {}
+        for m in DISPLAY_MODES:
+            mode_cols[m] = "OPEN" if snr_db >= MODE_THRESHOLDS_DB[m] else "--"
+
+        # Determine result
         if expect_open is not None:
-            if expect_open and is_open:
+            threshold = MODE_THRESHOLDS_DB[test_mode]
+            is_open = snr_db >= threshold
+            if expect_open == is_open:
                 status = "PASS"
-            elif not expect_open and not is_open:
-                status = "PASS"
+                pass_count += 1
             else:
                 status = "FAIL"
+                fail_count += 1
+            tested_modes.add(test_mode)
         else:
+            # No expectation — show OPEN/closed based on WSPR threshold
+            is_open = snr_db >= MODE_THRESHOLDS_DB["WSPR"]
             status = "OPEN" if is_open else "closed"
 
-        results.append((label, snr_sigma, snr_db, distance_km, status))
+        # Print row
+        print(ROW_FMT.format(
+            n=str(i + 1), path=path_str, band=band,
+            db=f"{snr_db:+.1f}", km=f"{distance_km:,.0f}",
+            sfi=f"{sfi:.0f}", kp=format_kp(kp),
+            hour=str(hour), mon=str(month),
+            wspr=mode_cols["WSPR"], ft8=mode_cols["FT8"],
+            cw=mode_cols["CW"], ssb=mode_cols["SSB"],
+            result=status,
+        ))
 
-    # Results table
-    print(f"  {'#':>3s}  {'Label':<30s}  {'SNR':>8s}  {'dB':>7s}  {'km':>8s}  {'Status':>8s}")
-    print(f"  {'─' * 70}")
+    print(f"  {'─' * (sep_width - 2)}")
 
-    pass_count = 0
-    fail_count = 0
-    for i, (label, sigma, db, km, status) in enumerate(results):
-        if sigma is None:
-            print(f"  {i+1:>3d}  {label:<30s}  {'—':>8s}  {'—':>7s}  {'—':>8s}  {status:>8s}")
-        else:
-            print(f"  {i+1:>3d}  {label:<30s}  {sigma:>+8.3f}  {db:>+7.1f}  {km:>8,.0f}  {status:>8s}")
-
-        if status == "PASS":
-            pass_count += 1
-        elif status == "FAIL":
-            fail_count += 1
-
-    print(f"  {'─' * 70}")
-
-    # Mode verdicts for each path
-    has_expectations = any(r[4] in ("PASS", "FAIL") for r in results)
+    # Summary
+    has_expectations = (pass_count + fail_count) > 0
     if has_expectations:
         total_tested = pass_count + fail_count
-        print(f"\n  Expectations: {pass_count}/{total_tested} passed")
+        if len(tested_modes) == 1:
+            mode_note = f" (mode: {next(iter(tested_modes))})"
+        else:
+            mode_note = ""
+        print(f"\n  Expectations: {pass_count}/{total_tested} passed{mode_note}")
         if fail_count > 0:
             print(f"  {fail_count} path(s) did not match expected open/closed state")
-
-    # Mode breakdown for first path as example
-    if results and results[0][2] is not None:
-        print(f"\n  Mode verdicts for: {results[0][0]}")
-        snr_db_first = results[0][2]
-        for mode, threshold in MODE_THRESHOLDS_DB.items():
-            v = "OPEN" if snr_db_first >= threshold else "closed"
-            marker = ">>>" if v == "OPEN" else "   "
-            print(f"    {marker} {mode:<5s}  {v:<6s}  (threshold: {threshold:+.0f} dB)")
 
     print()
     return 1 if fail_count > 0 else 0

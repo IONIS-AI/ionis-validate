@@ -11,6 +11,14 @@ Usage:
   ionis-validate adif my_log.adi --my-grid DN26
   ionis-validate adif my_log.adi --my-grid DN26 --export observations.json
   ionis-validate adif my_log.adi --my-grid DN26 --sfi 140 --kp 2
+
+Any QSO with valid grids and an HF band is measured against the model.
+Records missing required inputs (grid, band) are skipped.
+
+For best results, export only confirmed QSOs (eQSL, LoTW, or paper QSL)
+from your logger. A confirmed QSL proves the contact happened and the
+band was open. The tool will process any valid ADIF record, but
+unconfirmed QSOs may include logging errors or busted calls.
 """
 
 import argparse
@@ -121,6 +129,10 @@ def extract_observations(records, my_grid_default):
 
     Returns list of dicts with: tx_grid, rx_grid, band_id, freq_mhz,
     mode, ionis_mode, hour_utc, month, year, snr_db (if available).
+
+    A record is included if it meets the model's input requirements:
+    valid TX grid, valid RX grid, and a recognized HF band. Records
+    missing any of these are skipped with the reason noted.
     """
     observations = []
     skipped = {"no_grid": 0, "no_band": 0, "bad_grid": 0, "non_hf": 0}
@@ -262,9 +274,13 @@ def run_predictions(observations, model, config, device, sfi_override=None,
     kp_val = kp_override if kp_override else 2.0
     freq_hz = freq_mhz * 1e6
 
+    # Broadcast scalar sfi/kp to arrays so build_features gets uniform shapes
+    sfi_arr = np.full(n, sfi_val, dtype=np.float32)
+    kp_arr = np.full(n, kp_val, dtype=np.float32)
+
     # build_features returns shape (13, n) for array inputs — transpose to (n, 13)
     features = build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz,
-                              sfi_val, kp_val, hour_utc, month).T
+                              sfi_arr, kp_arr, hour_utc, month).T
 
     # Batch inference
     norm_constants = {}
@@ -381,10 +397,10 @@ def print_report(results, skipped, filepath, my_grid, sfi, kp):
         print()
 
     print("=" * 70)
-    print(f"  Overall Recall: {recall:.2f}% on {total:,} confirmed QSOs")
+    print(f"  Overall Recall: {recall:.2f}% on {total:,} QSOs")
     print("=" * 70)
     print()
-    print("  Every QSO in your log is a confirmed contact — the band WAS open.")
+    print("  Each QSO is a contact that happened — the band was open.")
     print("  Recall measures how often the model agrees.")
     print()
 
@@ -473,7 +489,7 @@ def main():
     records = parse_adif(args.adif_file, encoding=args.encoding)
     print(f"  Parsed {len(records):,} ADIF records")
 
-    # Extract anonymous observations
+    # Extract observations that meet model input requirements
     observations, skipped = extract_observations(records, my_grid)
     print(f"  Extracted {len(observations):,} HF observations with valid grids")
 
