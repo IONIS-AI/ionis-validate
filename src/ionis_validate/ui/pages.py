@@ -10,7 +10,6 @@ import json
 import os
 import platform
 import sys
-import tempfile
 
 import numpy as np
 import torch
@@ -304,29 +303,32 @@ def build_adif_tab(model, config, checkpoint, device):
     with ui.card().classes("w-full max-w-3xl mx-auto"):
         ui.label("ADIF Log Validation").classes("text-h6 q-mb-md")
         ui.label(
-            "Upload your ADIF (.adi/.adif) log. Callsigns are stripped at parse time "
-            "and never stored."
+            "Enter the path to your ADIF (.adi/.adif) log file. "
+            "Callsigns are stripped at parse time and never stored."
         ).classes("text-body2 text-grey q-mb-sm")
 
         upload_state = {"path": None, "name": None}
 
-        async def handle_upload(e):
-            try:
-                tmp_path = tempfile.mktemp(suffix=".adi")
-                await e.file.save(tmp_path)
-                size = os.path.getsize(tmp_path)
-                upload_state["path"] = tmp_path
-                upload_state["name"] = e.file.name
-                status_label.set_text(f"Loaded: {e.file.name} ({size:,} bytes)")
-                ui.notify(f"File saved: {e.file.name} ({size:,} bytes)", type="positive")
-            except Exception as ex:
-                status_label.set_text(f"Upload error: {ex}")
-                ui.notify(f"Upload error: {ex}", type="negative")
+        with ui.row().classes("w-full items-end gap-2"):
+            file_path_input = ui.input(
+                "ADIF file path", placeholder="/path/to/logbook.adi",
+            ).classes("flex-grow")
 
-        ui.upload(
-            label="Upload .adi / .adif", auto_upload=True, on_upload=handle_upload,
-            max_file_size=100_000_000,
-        ).props('accept=".adi,.adif"').classes("w-full")
+            def load_file():
+                path = file_path_input.value.strip()
+                if not path:
+                    status_label.set_text("Enter a file path")
+                    return
+                if not os.path.isfile(path):
+                    status_label.set_text(f"File not found: {path}")
+                    return
+                size = os.path.getsize(path)
+                upload_state["path"] = path
+                upload_state["name"] = os.path.basename(path)
+                status_label.set_text(f"Loaded: {upload_state['name']} ({size:,} bytes)")
+
+            ui.button("Load", on_click=load_file).props("outline")
+
         status_label = ui.label("").classes("text-body2")
 
         with ui.row().classes("gap-4 q-mt-sm"):
@@ -341,7 +343,7 @@ def build_adif_tab(model, config, checkpoint, device):
 
             if upload_state["path"] is None:
                 with result_area:
-                    ui.label("No file uploaded").classes("text-negative")
+                    ui.label("No file loaded — enter a path and click Load").classes("text-negative")
                 return
 
             tmp_path = upload_state["path"]
@@ -457,10 +459,9 @@ def build_adif_tab(model, config, checkpoint, device):
                     ui.label(f"Error: {e}").classes("text-negative")
 
         def reset_adif():
-            if upload_state["path"] and os.path.exists(upload_state["path"]):
-                os.unlink(upload_state["path"])
             upload_state["path"] = None
             upload_state["name"] = None
+            file_path_input.value = ""
             status_label.set_text("")
             sfi_input.value = 150
             kp_input.value = 2.0
