@@ -37,7 +37,6 @@ def main():
     from ionis_validate.ui.pages import (
         build_predict_tab,
         build_custom_tab,
-        build_adif_tab,
         build_info_tab,
         build_report_tab,
     )
@@ -64,7 +63,6 @@ def main():
         with ui.tabs().classes("w-full") as tabs:
             predict_tab = ui.tab("Predict")
             custom_tab = ui.tab("Custom")
-            adif_tab = ui.tab("ADIF")
             report_tab = ui.tab("Report")
             info_tab = ui.tab("Info")
 
@@ -73,8 +71,6 @@ def main():
                 build_predict_tab(*shared)
             with ui.tab_panel(custom_tab):
                 build_custom_tab(*shared)
-            with ui.tab_panel(adif_tab):
-                build_adif_tab(*shared)
             with ui.tab_panel(report_tab):
                 build_report_tab(*shared)
             with ui.tab_panel(info_tab):
