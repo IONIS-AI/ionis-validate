@@ -36,6 +36,7 @@ def main():
         build_custom_tab,
         build_adif_tab,
         build_info_tab,
+        build_report_tab,
     )
 
     # Load model once at startup
@@ -61,6 +62,7 @@ def main():
             predict_tab = ui.tab("Predict")
             custom_tab = ui.tab("Custom")
             adif_tab = ui.tab("ADIF")
+            report_tab = ui.tab("Report")
             info_tab = ui.tab("Info")
 
         with ui.tab_panels(tabs, value=predict_tab).classes("w-full"):
@@ -70,6 +72,8 @@ def main():
                 build_custom_tab(*shared)
             with ui.tab_panel(adif_tab):
                 build_adif_tab(*shared)
+            with ui.tab_panel(report_tab):
+                build_report_tab(*shared)
             with ui.tab_panel(info_tab):
                 build_info_tab(*shared)
 

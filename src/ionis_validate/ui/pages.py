@@ -26,6 +26,9 @@ from ionis_validate.tests.run_adif import (
     parse_adif, extract_observations, run_predictions,
     _MODE_THRESHOLDS, _BAND_MAP, _BAND_MHZ,
 )
+from ionis_validate.tests.run_report import (
+    collect_system_info, generate_report, run_test_suite,
+)
 
 
 # ── Predict Tab ──────────────────────────────────────────────────────────────
@@ -119,7 +122,19 @@ def build_predict_tab(model, config, checkpoint, device):
                 with result_area:
                     ui.label(f"Error: {e}").classes("text-negative")
 
-        ui.button("Predict", on_click=run_predict, color="primary").classes("q-mt-sm")
+        def reset_predict():
+            tx_grid.value = "DN46"
+            rx_grid.value = "IO91"
+            band.value = "20m"
+            sfi.value = 150
+            kp.value = 2.0
+            hour.value = 14
+            month.value = 6
+            result_area.clear()
+
+        with ui.row().classes("q-mt-sm gap-2"):
+            ui.button("Predict", on_click=run_predict, color="primary")
+            ui.button("Clear", on_click=reset_predict).props("outline")
 
 
 # ── Custom Tab ───────────────────────────────────────────────────────────────
@@ -269,7 +284,13 @@ def build_custom_tab(model, config, checkpoint, device):
                         f"Expectations: {pass_count}/{total_tested} passed"
                     ).classes(f"text-subtitle2 {color} q-mt-sm")
 
-        ui.button("Run", on_click=run_custom, color="primary").classes("q-mt-sm")
+        def reset_custom():
+            json_input.value = sample_json
+            result_area.clear()
+
+        with ui.row().classes("q-mt-sm gap-2"):
+            ui.button("Run", on_click=run_custom, color="primary")
+            ui.button("Clear", on_click=reset_custom).props("outline")
 
 
 # ── ADIF Tab ─────────────────────────────────────────────────────────────────
@@ -431,7 +452,17 @@ def build_adif_tab(model, config, checkpoint, device):
             finally:
                 os.unlink(tmp_path)
 
-        ui.button("Validate", on_click=run_adif, color="primary").classes("q-mt-sm")
+        def reset_adif():
+            uploaded_content["data"] = None
+            uploaded_content["name"] = None
+            status_label.set_text("")
+            sfi_input.value = 150
+            kp_input.value = 2.0
+            result_area.clear()
+
+        with ui.row().classes("q-mt-sm gap-2"):
+            ui.button("Validate", on_click=run_adif, color="primary")
+            ui.button("Clear", on_click=reset_adif).props("outline")
 
 
 # ── Info Tab ─────────────────────────────────────────────────────────────────
@@ -510,3 +541,92 @@ def build_info_tab(model, config, checkpoint, device):
         elif device.type == "mps":
             sys_rows.append({"key": "MPS", "value": "available"})
         ui.table(columns=info_columns, rows=sys_rows).classes("w-full")
+
+
+# ── Report Tab ───────────────────────────────────────────────────────────────
+
+GITHUB_NEW_ISSUE = "https://github.com/IONIS-AI/ionis-validate/issues/new/choose"
+
+
+def build_report_tab(model, config, checkpoint, device):
+    """Generate a beta test report for GitHub Issues."""
+    with ui.card().classes("w-full max-w-3xl mx-auto"):
+        ui.label("Beta Test Report").classes("text-h6 q-mb-md")
+        ui.label(
+            "Generate a structured report you can paste into a GitHub Issue. "
+            "Collects system info and optionally runs the 62-test suite."
+        ).classes("text-body2 text-grey q-mb-sm")
+
+        run_tests_toggle = ui.switch("Include test suite results", value=True)
+
+        result_area = ui.column().classes("w-full q-mt-md")
+
+        def generate():
+            result_area.clear()
+
+            with result_area:
+                ui.label("Collecting system info...").classes("text-body2")
+
+            info = collect_system_info()
+            if "error" in info:
+                result_area.clear()
+                with result_area:
+                    ui.label(f"Error: {info['error']}").classes("text-negative")
+                return
+
+            test_passed = None
+            test_output = None
+
+            if run_tests_toggle.value:
+                result_area.clear()
+                with result_area:
+                    ui.label("Running 62-test suite... this may take a moment.").classes(
+                        "text-body2"
+                    )
+                test_passed, test_output = run_test_suite()
+
+            report = generate_report(
+                info,
+                test_passed=test_passed,
+                test_output=test_output,
+            )
+
+            result_area.clear()
+            with result_area:
+                status_text = ""
+                if test_passed is not None:
+                    status_text = " — Tests: PASS" if test_passed else " — Tests: FAIL"
+                    color = "text-positive" if test_passed else "text-negative"
+                    ui.label(f"Report generated{status_text}").classes(
+                        f"text-subtitle1 font-bold {color}"
+                    )
+                else:
+                    ui.label("Report generated (tests skipped)").classes(
+                        "text-subtitle1 font-bold"
+                    )
+
+                report_area = ui.textarea(
+                    "Report Markdown", value=report,
+                ).classes("w-full font-mono").props("rows=20 readonly")
+
+                with ui.row().classes("gap-2 q-mt-sm"):
+                    ui.button(
+                        "Copy to Clipboard",
+                        on_click=lambda: ui.run_javascript(
+                            f'navigator.clipboard.writeText({json.dumps(report)})'
+                        ),
+                        color="primary",
+                    )
+                    ui.link(
+                        "Open GitHub Issues",
+                        target=GITHUB_NEW_ISSUE,
+                        new_tab=True,
+                    ).classes("q-btn q-btn--outline text-primary q-mt-xs")
+
+        def reset_report():
+            run_tests_toggle.value = True
+            result_area.clear()
+
+        with ui.row().classes("q-mt-sm gap-2"):
+            ui.button("Generate Report", on_click=generate, color="primary")
+            ui.button("Clear", on_click=reset_report).props("outline")
