@@ -306,35 +306,37 @@ def build_adif_tab(model, config, checkpoint, device):
     with ui.card().classes("w-full max-w-3xl mx-auto"):
         ui.label("ADIF Log Validation").classes("text-h6 q-mb-md")
         ui.label(
-            "Enter the path to your ADIF (.adi/.adif) log file. "
-            "Callsigns are stripped at parse time and never stored."
+            "Upload your ADIF (.adi/.adif) log. Callsigns are stripped at parse time "
+            "and never stored."
         ).classes("text-body2 text-grey q-mb-sm")
 
         upload_state = {"path": None, "name": None}
 
-        with ui.row().classes("w-full items-end gap-2"):
-            file_path_input = ui.input(
-                "ADIF file path", placeholder="/path/to/logbook.adi",
-            ).classes("flex-grow")
+        async def handle_upload(e):
+            try:
+                log.info("[ADIF] handle_upload fired, file=%s", e.file.name)
+                data = await e.file.read()
+                import tempfile
+                tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".adi", delete=False)
+                tmp.write(data)
+                tmp.close()
+                upload_state["path"] = tmp.name
+                upload_state["name"] = e.file.name
+                log.info("[ADIF] saved %d bytes to %s", len(data), tmp.name)
+                status_label.set_text(f"Loaded: {e.file.name} ({len(data):,} bytes)")
+            except Exception as ex:
+                log.error("[ADIF] upload error: %s", ex)
+                status_label.set_text(f"Upload error: {ex}")
 
-            def load_file():
-                path = file_path_input.value.strip()
-                log.info("[ADIF] load_file called, path=%r", path)
-                if not path:
-                    status_label.set_text("Enter a file path")
-                    return
-                if not os.path.isfile(path):
-                    log.warning("[ADIF] file not found: %s", path)
-                    status_label.set_text(f"File not found: {path}")
-                    return
-                size = os.path.getsize(path)
-                upload_state["path"] = path
-                upload_state["name"] = os.path.basename(path)
-                log.info("[ADIF] loaded: %s (%d bytes)", upload_state["name"], size)
-                status_label.set_text(f"Loaded: {upload_state['name']} ({size:,} bytes)")
+        def handle_rejected():
+            log.warning("[ADIF] file rejected by browser (size or type)")
+            status_label.set_text("File rejected — must be .adi/.adif, max 100 MB")
 
-            ui.button("Load", on_click=load_file).props("outline")
-
+        ui.upload(
+            label="Upload .adi / .adif", auto_upload=True,
+            on_upload=handle_upload, on_rejected=handle_rejected,
+            max_file_size=100_000_000,
+        ).props('accept=".adi,.adif"').classes("w-full")
         status_label = ui.label("").classes("text-body2")
 
         with ui.row().classes("gap-4 q-mt-sm"):
@@ -350,7 +352,7 @@ def build_adif_tab(model, config, checkpoint, device):
 
             if upload_state["path"] is None:
                 with result_area:
-                    ui.label("No file loaded — enter a path and click Load").classes("text-negative")
+                    ui.label("No file uploaded").classes("text-negative")
                 return
 
             tmp_path = upload_state["path"]
@@ -467,9 +469,10 @@ def build_adif_tab(model, config, checkpoint, device):
                     ui.label(f"Error: {e}").classes("text-negative")
 
         def reset_adif():
+            if upload_state["path"] and os.path.exists(upload_state["path"]):
+                os.unlink(upload_state["path"])
             upload_state["path"] = None
             upload_state["name"] = None
-            file_path_input.value = ""
             status_label.set_text("")
             sfi_input.value = 150
             kp_input.value = 2.0
