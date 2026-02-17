@@ -85,5 +85,10 @@ def main():
     print("  Open http://<this-machine>:8765 in your browser")
     print()
 
-    ui.run(host="0.0.0.0", port=8765, title="IONIS V20", reload=False)
+    try:
+        ui.run(host="0.0.0.0", port=8765, title="IONIS V20", reload=False)
+    except KeyboardInterrupt:
+        pass
+
+    print("\n  IONIS V20 — Server stopped.\n")
     return 0
