@@ -6,7 +6,7 @@ own QSO log — all from the command line, on any platform.
 
 IONIS (Ionospheric Neural Inference System) predicts HF radio signal
 strength from WSPR, RBN, and contest data. The V20 model was trained on
-31 million propagation observations spanning 2008-2025.
+31 million propagation observations spanning 2005-2025.
 
 ## Install
 
@@ -33,12 +33,16 @@ ionis-validate predict \
 
 ## Validate Your Log
 
-Export your QSO log from eQSL, LoTW, or QRZ as an ADIF (.adi) file,
-then check how often the model agrees the band was open for each contact.
+Export your QSO log as an ADIF (.adi) file, then check how often the
+model agrees the band was open for each contact. Both grids come from
+the log itself (`MY_GRIDSQUARE` and `GRIDSQUARE`).
 
 ```bash
-ionis-validate adif my_log.adi --my-grid DN26
+ionis-validate adif my_log.adi
 ```
+
+QRZ exports work out of the box. LoTW requires both "Include QSL details"
+and "Include QSO station details" checked on the download form.
 
 All processing happens locally. Callsigns are stripped at parse time and
 never leave your machine. The tool extracts only grid pairs, band, mode,
