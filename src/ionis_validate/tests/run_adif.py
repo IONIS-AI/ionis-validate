@@ -24,6 +24,7 @@ unconfirmed QSOs may include logging errors or busted calls.
 """
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -33,8 +34,37 @@ from datetime import datetime, timezone
 import numpy as np
 import torch
 
-
+from ionis_validate import _data_path
 from ionis_validate.model import IonisGate, get_device, load_model, build_features, grid4_to_latlon
+
+
+# ── Solar Lookup ─────────────────────────────────────────────────────────────
+
+_SOLAR_LOOKUP = None  # lazy-loaded dict: "YYYY-MM-DD" → (sfi, kp)
+
+
+def _load_solar_lookup():
+    """Load daily SFI/Kp lookup table from bundled CSV."""
+    global _SOLAR_LOOKUP
+    if _SOLAR_LOOKUP is not None:
+        return _SOLAR_LOOKUP
+
+    path = _data_path("solar_daily.csv")
+    _SOLAR_LOOKUP = {}
+    with open(path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            _SOLAR_LOOKUP[row["date"]] = (float(row["sfi"]), float(row["kp"]))
+    return _SOLAR_LOOKUP
+
+
+def lookup_solar(date_str):
+    """Look up SFI and Kp for a date string (YYYY-MM-DD).
+
+    Returns (sfi, kp) or None if date not in lookup table.
+    """
+    table = _load_solar_lookup()
+    return table.get(date_str)
 
 # ── ADIF Parser (self-contained, no external dependencies) ───────────────────
 
@@ -226,6 +256,11 @@ def extract_observations(records):
                 except ValueError:
                     pass
 
+        # Build ISO date for solar lookup
+        qso_date = None
+        if len(date_str) >= 8:
+            qso_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+
         obs = {
             "tx_grid": my_grid,
             "rx_grid": their_grid,
@@ -236,6 +271,7 @@ def extract_observations(records):
             "hour_utc": hour_utc,
             "month": month,
             "year": year,
+            "qso_date": qso_date,
         }
         if snr_db is not None:
             obs["snr_db"] = snr_db
@@ -247,9 +283,17 @@ def extract_observations(records):
 
 def run_predictions(observations, model, config, device, sfi_override=None,
                     kp_override=None):
-    """Run V20 inference on observations and compute recall."""
+    """Run V20 inference on observations and compute recall.
+
+    Solar conditions are resolved per-QSO from the bundled daily lookup
+    table (solar_daily.csv). Falls back to sfi_override/kp_override for
+    dates not in the table, and to SFI=150/Kp=2.0 as last resort.
+    """
     if not observations:
         return []
+
+    fallback_sfi = sfi_override if sfi_override else 150.0
+    fallback_kp = kp_override if kp_override else 2.0
 
     # Build arrays
     n = len(observations)
@@ -261,7 +305,10 @@ def run_predictions(observations, model, config, device, sfi_override=None,
     month = np.zeros(n, dtype=np.int32)
     hour_utc = np.zeros(n, dtype=np.int32)
     band_ids = np.zeros(n, dtype=np.int32)
+    sfi_arr = np.zeros(n, dtype=np.float32)
+    kp_arr = np.zeros(n, dtype=np.float32)
 
+    solar_hits = 0
     for i, obs in enumerate(observations):
         lat, lon = grid4_to_latlon(obs["tx_grid"])
         tx_lat[i], tx_lon[i] = lat, lon
@@ -272,13 +319,16 @@ def run_predictions(observations, model, config, device, sfi_override=None,
         hour_utc[i] = obs["hour_utc"]
         band_ids[i] = obs["band_id"]
 
-    sfi_val = sfi_override if sfi_override else 150.0
-    kp_val = kp_override if kp_override else 2.0
-    freq_hz = freq_mhz * 1e6
+        # Per-QSO solar conditions
+        solar = lookup_solar(obs.get("qso_date")) if obs.get("qso_date") else None
+        if solar:
+            sfi_arr[i], kp_arr[i] = solar
+            solar_hits += 1
+        else:
+            sfi_arr[i] = fallback_sfi
+            kp_arr[i] = fallback_kp
 
-    # Broadcast scalar sfi/kp to arrays so build_features gets uniform shapes
-    sfi_arr = np.full(n, sfi_val, dtype=np.float32)
-    kp_arr = np.full(n, kp_val, dtype=np.float32)
+    freq_hz = freq_mhz * 1e6
 
     # build_features returns shape (13, n) for array inputs — transpose to (n, 13)
     features = build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz,
@@ -315,13 +365,14 @@ def run_predictions(observations, model, config, device, sfi_override=None,
         predicted_db = float(predictions_db[i])
         band_open = predicted_db >= threshold
         r = {**obs, "predicted_db": predicted_db, "threshold_db": threshold,
-             "band_open": band_open}
+             "band_open": band_open, "sfi_used": float(sfi_arr[i]),
+             "kp_used": float(kp_arr[i])}
         results.append(r)
 
-    return results
+    return results, solar_hits
 
 
-def print_report(results, skipped, filepath, sfi, kp):
+def print_report(results, skipped, filepath, solar_hits):
     """Print human-readable validation report."""
     total = len(results)
     if total == 0:
@@ -350,7 +401,8 @@ def print_report(results, skipped, filepath, sfi, kp):
         if len(tx_grids) > 5:
             grid_str += f", ... ({len(tx_grids)} total)"
         print(f"  TX grids:      {grid_str}")
-    print(f"  Conditions:    SFI={sfi}, Kp={kp}")
+    solar_pct = 100.0 * solar_hits / total if total else 0
+    print(f"  Solar lookup:  {solar_hits:,}/{total:,} QSOs ({solar_pct:.0f}%) matched daily conditions")
     print()
 
     # Skipped summary
@@ -510,11 +562,11 @@ def main():
 
     # Run predictions
     print(f"  Running inference on {len(observations):,} observations...")
-    results = run_predictions(observations, model, config, device,
-                              sfi_override=args.sfi, kp_override=args.kp)
+    results, solar_hits = run_predictions(observations, model, config, device,
+                                          sfi_override=args.sfi, kp_override=args.kp)
 
     # Print report
-    print_report(results, skipped, args.adif_file, args.sfi, args.kp)
+    print_report(results, skipped, args.adif_file, solar_hits)
 
     # Export if requested
     if args.export:

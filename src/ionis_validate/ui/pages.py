@@ -342,11 +342,6 @@ def build_adif_tab(model, config, checkpoint, device):
         ).props('accept=".adi,.adif"').classes("w-full")
         status_label = ui.label("").classes("text-body2")
 
-        with ui.row().classes("gap-4 q-mt-sm"):
-            sfi_input = ui.number("SFI", value=150, min=65, max=350, step=1).classes("w-28")
-            kp_input = ui.number("Kp", value=2.0, min=0, max=9, step=0.5,
-                                 format="%.1f").classes("w-28")
-
         result_area = ui.column().classes("w-full q-mt-md")
 
         async def run_adif():
@@ -372,9 +367,8 @@ def build_adif_tab(model, config, checkpoint, device):
                         ).classes("text-negative")
                     return
 
-                results = run_predictions(
+                results, solar_hits = run_predictions(
                     observations, model, config, device,
-                    sfi_override=sfi_input.value, kp_override=kp_input.value,
                 )
 
                 total = len(results)
@@ -386,11 +380,12 @@ def build_adif_tab(model, config, checkpoint, device):
                     with ui.card().classes("w-full bg-blue-50"):
                         ui.label("Validation Results").classes("text-subtitle1 font-bold")
                         ui.separator()
+                        solar_pct = 100.0 * solar_hits / total if total else 0
                         with ui.grid(columns=2).classes("gap-2"):
                             ui.label("Log file:")
                             ui.label(upload_state["name"])
-                            ui.label("Conditions:")
-                            ui.label(f"SFI={sfi_input.value:.0f}, Kp={kp_input.value:.1f}")
+                            ui.label("Solar conditions:")
+                            ui.label(f"{solar_hits:,}/{total:,} ({solar_pct:.0f}%) per-QSO daily lookup")
                             ui.label("Observations:")
                             ui.label(f"{total:,}")
                             ui.label("Band open:")
@@ -477,8 +472,6 @@ def build_adif_tab(model, config, checkpoint, device):
             upload_state["path"] = None
             upload_state["name"] = None
             status_label.set_text("")
-            sfi_input.value = 150
-            kp_input.value = 2.0
             result_area.clear()
 
         with ui.row().classes("q-mt-sm gap-2"):
