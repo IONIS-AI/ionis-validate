@@ -46,7 +46,7 @@ def build_predict_tab(model, config, checkpoint, device):
             }).classes("w-40")
 
         with ui.row().classes("w-full gap-4"):
-            band = ui.select("Band", options=band_options, value="20m").classes("w-32")
+            band = ui.select(options=band_options, label="Band", value="20m").classes("w-32")
             sfi = ui.number("SFI", value=150, min=65, max=350, step=1).classes("w-28")
             kp = ui.number("Kp", value=2.0, min=0, max=9, step=0.5,
                            format="%.1f").classes("w-28")
