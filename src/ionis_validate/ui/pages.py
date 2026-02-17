@@ -159,8 +159,8 @@ def build_custom_tab(model, config, checkpoint, device):
         json_input = ui.textarea("JSON", value=sample_json).classes("w-full").props("rows=12")
 
         async def handle_upload(e):
-            content = e.content.read().decode("utf-8")
-            json_input.value = content
+            data = await e.file.read()
+            json_input.value = data.decode("utf-8")
 
         ui.upload(label="Upload .json", auto_upload=True, on_upload=handle_upload).props(
             'accept=".json" flat'
@@ -312,14 +312,13 @@ def build_adif_tab(model, config, checkpoint, device):
 
         async def handle_upload(e):
             try:
-                e.content.seek(0)
-                data = e.content.read()
+                data = await e.file.read()
                 tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".adi", delete=False)
                 tmp.write(data)
                 tmp.close()
                 upload_state["path"] = tmp.name
-                upload_state["name"] = e.name
-                status_label.set_text(f"Loaded: {e.name} ({len(data):,} bytes)")
+                upload_state["name"] = e.file.name
+                status_label.set_text(f"Loaded: {e.file.name} ({len(data):,} bytes)")
             except Exception as ex:
                 status_label.set_text(f"Upload error: {ex}")
 
