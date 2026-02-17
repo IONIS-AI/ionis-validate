@@ -312,15 +312,16 @@ def build_adif_tab(model, config, checkpoint, device):
 
         async def handle_upload(e):
             try:
-                data = await e.file.read()
-                tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".adi", delete=False)
-                tmp.write(data)
-                tmp.close()
-                upload_state["path"] = tmp.name
+                tmp_path = tempfile.mktemp(suffix=".adi")
+                await e.file.save(tmp_path)
+                size = os.path.getsize(tmp_path)
+                upload_state["path"] = tmp_path
                 upload_state["name"] = e.file.name
-                status_label.set_text(f"Loaded: {e.file.name} ({len(data):,} bytes)")
+                status_label.set_text(f"Loaded: {e.file.name} ({size:,} bytes)")
+                ui.notify(f"File saved: {e.file.name} ({size:,} bytes)", type="positive")
             except Exception as ex:
                 status_label.set_text(f"Upload error: {ex}")
+                ui.notify(f"Upload error: {ex}", type="negative")
 
         ui.upload(
             label="Upload .adi / .adif", auto_upload=True, on_upload=handle_upload,
