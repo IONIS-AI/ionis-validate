@@ -7,11 +7,14 @@ existing runner functions — no model logic here.
 """
 
 import json
+import logging
 import os
 import platform
 import sys
 
 import numpy as np
+
+log = logging.getLogger("ionis_validate.ui")
 import torch
 from nicegui import ui
 
@@ -316,15 +319,18 @@ def build_adif_tab(model, config, checkpoint, device):
 
             def load_file():
                 path = file_path_input.value.strip()
+                log.info("[ADIF] load_file called, path=%r", path)
                 if not path:
                     status_label.set_text("Enter a file path")
                     return
                 if not os.path.isfile(path):
+                    log.warning("[ADIF] file not found: %s", path)
                     status_label.set_text(f"File not found: {path}")
                     return
                 size = os.path.getsize(path)
                 upload_state["path"] = path
                 upload_state["name"] = os.path.basename(path)
+                log.info("[ADIF] loaded: %s (%d bytes)", upload_state["name"], size)
                 status_label.set_text(f"Loaded: {upload_state['name']} ({size:,} bytes)")
 
             ui.button("Load", on_click=load_file).props("outline")
@@ -340,6 +346,7 @@ def build_adif_tab(model, config, checkpoint, device):
 
         async def run_adif():
             result_area.clear()
+            log.info("[ADIF] run_adif called, upload_state=%r", upload_state)
 
             if upload_state["path"] is None:
                 with result_area:
@@ -347,6 +354,7 @@ def build_adif_tab(model, config, checkpoint, device):
                 return
 
             tmp_path = upload_state["path"]
+            log.info("[ADIF] parsing %s", tmp_path)
 
             try:
                 records = parse_adif(tmp_path)

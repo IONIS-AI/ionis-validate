@@ -8,10 +8,13 @@ Usage:
   ionis-validate ui
 """
 
+import logging
 import sys
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
     if sys.version_info < (3, 10):
         print()
         print(f"  ERROR: The browser UI requires Python >= 3.10 (you have {sys.version.split()[0]})")
