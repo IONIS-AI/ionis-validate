@@ -308,13 +308,17 @@ def build_adif_tab(model, config, checkpoint, device):
             "and never stored."
         ).classes("text-body2 text-grey q-mb-sm")
 
-        uploaded_content = {"data": None, "name": None}
+        upload_state = {"path": None, "name": None}
 
         async def handle_upload(e):
             e.content.seek(0)
-            uploaded_content["data"] = e.content.read()
-            uploaded_content["name"] = e.name
-            status_label.set_text(f"Loaded: {e.name}")
+            data = e.content.read()
+            tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".adi", delete=False)
+            tmp.write(data)
+            tmp.close()
+            upload_state["path"] = tmp.name
+            upload_state["name"] = e.name
+            status_label.set_text(f"Loaded: {e.name} ({len(data):,} bytes)")
 
         ui.upload(
             label="Upload .adi / .adif", auto_upload=True, on_upload=handle_upload,
@@ -331,15 +335,12 @@ def build_adif_tab(model, config, checkpoint, device):
         async def run_adif():
             result_area.clear()
 
-            if uploaded_content["data"] is None:
+            if upload_state["path"] is None:
                 with result_area:
                     ui.label("No file uploaded").classes("text-negative")
                 return
 
-            # Write to temp file for parser
-            with tempfile.NamedTemporaryFile(mode="wb", suffix=".adi", delete=False) as tmp:
-                tmp.write(uploaded_content["data"])
-                tmp_path = tmp.name
+            tmp_path = upload_state["path"]
 
             try:
                 records = parse_adif(tmp_path)
@@ -368,7 +369,7 @@ def build_adif_tab(model, config, checkpoint, device):
                         ui.separator()
                         with ui.grid(columns=2).classes("gap-2"):
                             ui.label("Log file:")
-                            ui.label(uploaded_content["name"])
+                            ui.label(upload_state["name"])
                             ui.label("Conditions:")
                             ui.label(f"SFI={sfi_input.value:.0f}, Kp={kp_input.value:.1f}")
                             ui.label("Observations:")
@@ -450,12 +451,12 @@ def build_adif_tab(model, config, checkpoint, device):
             except Exception as e:
                 with result_area:
                     ui.label(f"Error: {e}").classes("text-negative")
-            finally:
-                os.unlink(tmp_path)
 
         def reset_adif():
-            uploaded_content["data"] = None
-            uploaded_content["name"] = None
+            if upload_state["path"] and os.path.exists(upload_state["path"]):
+                os.unlink(upload_state["path"])
+            upload_state["path"] = None
+            upload_state["name"] = None
             status_label.set_text("")
             sfi_input.value = 150
             kp_input.value = 2.0
