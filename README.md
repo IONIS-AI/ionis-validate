@@ -1,8 +1,8 @@
 # ionis-validate
 
 Validation suite for the IONIS V20 HF propagation model. Run 62 physics
-tests, predict SNR for any HF path, or validate the model against your
-own QSO log — all from the command line or a browser UI, on any platform.
+tests, predict SNR for any HF path, or batch-test your own paths — all
+from the command line or a browser UI, on any platform.
 
 IONIS (Ionospheric Neural Inference System) predicts HF radio signal
 strength from WSPR, RBN, and contest data. The V20 model was trained on
@@ -41,24 +41,7 @@ ionis-validate ui
 ```
 
 Opens a browser tab at `http://localhost:8765` with tabs for Predict,
-Custom, ADIF, Report, and Info.
-
-## Validate Your Log
-
-Export your QSO log as an ADIF (.adi) file, then check how often the
-model agrees the band was open for each contact. Both grids come from
-the log itself (`MY_GRIDSQUARE` and `GRIDSQUARE`).
-
-```bash
-ionis-validate adif my_log.adi
-```
-
-QRZ exports work out of the box. LoTW requires both "Include QSL details"
-and "Include QSO station details" checked on the download form.
-
-All processing happens locally. Callsigns are stripped at parse time and
-never leave your machine. The tool extracts only grid pairs, band, mode,
-and time — no personal information.
+Custom, Report, and Info.
 
 ## Batch Predictions
 
@@ -88,7 +71,7 @@ ionis-validate report
 
 IONIS processes only grid-pair geometry, band, time, and solar indices.
 No callsigns, names, or personal data are used by the model or stored
-by this tool. ADIF log validation strips all PII at parse time.
+by this tool.
 
 Full privacy policy: <https://ionis-ai.com/about/data-privacy/>
 

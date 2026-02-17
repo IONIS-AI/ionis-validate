@@ -96,19 +96,6 @@ body:
       required: false
 
   - type: textarea
-    id: test8-result
-    attributes:
-      label: "Test-8: ADIF Log Validation"
-      description: "If you ran your QSO log, include recall % and any mode/band breakdown"
-      placeholder: |
-        Log: 5,234 QSOs
-        Recall: 34.2%
-        Best mode: Digital (89%)
-        Worst mode: SSB (12%)
-    validations:
-      required: false
-
-  - type: textarea
     id: comments
     attributes:
       label: Additional Comments
