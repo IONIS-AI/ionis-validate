@@ -315,6 +315,9 @@ def build_adif_tab(model, config, checkpoint, device):
         async def handle_upload(e):
             try:
                 log.info("[ADIF] handle_upload fired, file=%s", e.file.name)
+                # Clean up previous temp file
+                if upload_state["path"] and os.path.exists(upload_state["path"]):
+                    os.unlink(upload_state["path"])
                 data = await e.file.read()
                 import tempfile
                 tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".adi", delete=False)
