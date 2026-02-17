@@ -311,6 +311,7 @@ def build_adif_tab(model, config, checkpoint, device):
         uploaded_content = {"data": None, "name": None}
 
         async def handle_upload(e):
+            e.content.seek(0)
             uploaded_content["data"] = e.content.read()
             uploaded_content["name"] = e.name
             status_label.set_text(f"Loaded: {e.name}")
@@ -327,7 +328,7 @@ def build_adif_tab(model, config, checkpoint, device):
 
         result_area = ui.column().classes("w-full q-mt-md")
 
-        def run_adif():
+        async def run_adif():
             result_area.clear()
 
             if uploaded_content["data"] is None:
