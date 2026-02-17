@@ -8,7 +8,6 @@ Usage:
   ionis-validate test
   ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m ...
   ionis-validate custom my_paths.json
-  ionis-validate adif my_log.adi
   ionis-validate report
   ionis-validate info
 """
@@ -21,7 +20,6 @@ COMMANDS = {
     "test":    "ionis_validate.tests.run_all",
     "predict": "ionis_validate.tests.run_predict",
     "custom":  "ionis_validate.tests.run_custom",
-    "adif":    "ionis_validate.tests.run_adif",
     "report":  "ionis_validate.tests.run_report",
     "info":    "ionis_validate.tests.run_info",
     "ui":      "ionis_validate.ui.app",
@@ -37,7 +35,6 @@ Commands:
   test       Run the full 62-test validation suite
   predict    Predict SNR for a single HF path
   custom     Run batch predictions from a JSON file
-  adif       Validate the model against your ADIF QSO log
   report     Generate a beta test report for GitHub Issues
   info       Show model and system information
   ui         Launch browser-based validation dashboard
@@ -45,7 +42,7 @@ Commands:
 Examples:
   ionis-validate test
   ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6
-  ionis-validate adif my_log.adi
+  ionis-validate custom my_paths.json
   ionis-validate info
 
 https://github.com/IONIS-AI/ionis-validate
