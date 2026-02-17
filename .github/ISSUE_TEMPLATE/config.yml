@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://ionis-ai.github.io/ionis-docs/testing/
+    about: Read the beta test plan and documentation
+  - name: Discussions
+    url: https://github.com/IONIS-AI/ionis-validate/discussions
+    about: Ask questions or discuss ideas

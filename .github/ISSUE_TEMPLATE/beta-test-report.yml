@@ -1,0 +1,126 @@
+name: Beta Test Report
+description: Submit your V20 beta test results
+title: "[Beta Test] "
+labels: ["beta-test", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing IONIS V20! Please complete all sections below.
+
+        Run `ionis-validate report` and paste the output, then fill in your test results.
+
+  - type: textarea
+    id: system-report
+    attributes:
+      label: System Report
+      description: Paste the output from `ionis-validate report` here
+      placeholder: |
+        ## IONIS V20 Beta Test Report
+        *Generated: ...*
+
+        ### System Info
+        ...
+    validations:
+      required: true
+
+  - type: input
+    id: test1-device
+    attributes:
+      label: "Test-1: Device Type"
+      description: "What device did the model load on? (cpu, cuda, or mps)"
+      placeholder: "mps"
+    validations:
+      required: true
+
+  - type: input
+    id: test2-result
+    attributes:
+      label: "Test-2: Test Suite Result"
+      description: "How many tests passed? (e.g., 62/62)"
+      placeholder: "62/62"
+    validations:
+      required: true
+
+  - type: input
+    id: test3-db
+    attributes:
+      label: "Test-3: Good Path (FN31 > IO91, 20m, Kp 2)"
+      description: "Predicted dB value and CW verdict"
+      placeholder: "-3.2 dB, CW OPEN"
+    validations:
+      required: true
+
+  - type: input
+    id: test4-db
+    attributes:
+      label: "Test-4: Marginal Path (DN46 > PM95, 15m, SFI 120)"
+      description: "Predicted dB value"
+      placeholder: "-21.5 dB"
+    validations:
+      required: true
+
+  - type: input
+    id: test5-db
+    attributes:
+      label: "Test-5: Storm Path (FN31 > IO91, 20m, Kp 7)"
+      description: "Predicted dB value (should be worse than Test-3)"
+      placeholder: "-15.8 dB"
+    validations:
+      required: true
+
+  - type: textarea
+    id: test6-result
+    attributes:
+      label: "Test-6: Your Good Path"
+      description: "A path you know works. Include grids, band, conditions, and whether the model agreed."
+      placeholder: |
+        Path: DN46 > IO91, 20m
+        Conditions: SFI 150, Kp 2, 14:00 UTC
+        Predicted: -2.5 dB, WSPR OPEN
+        Matches experience: Yes
+    validations:
+      required: false
+
+  - type: textarea
+    id: test7-result
+    attributes:
+      label: "Test-7: Your Bad Path"
+      description: "A path you know doesn't work. Did the model predict it closed?"
+      placeholder: |
+        Path: DN46 > VK3, 10m
+        Conditions: SFI 80, Kp 5, 04:00 UTC
+        Predicted: -32.1 dB, closed
+        Matches experience: Yes
+    validations:
+      required: false
+
+  - type: textarea
+    id: test8-result
+    attributes:
+      label: "Test-8: ADIF Log Validation"
+      description: "If you ran your QSO log, include recall % and any mode/band breakdown"
+      placeholder: |
+        Log: 5,234 QSOs
+        Recall: 34.2%
+        Best mode: Digital (89%)
+        Worst mode: SSB (12%)
+    validations:
+      required: false
+
+  - type: textarea
+    id: comments
+    attributes:
+      label: Additional Comments
+      description: "Anything that surprised you, bugs found, or suggestions"
+      placeholder: "The model predicted my path to ZL open when I've never worked ZL on that band..."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I ran the tests on my own system (not copy/pasting someone else's results)
+          required: true
