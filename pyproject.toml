@@ -21,6 +21,9 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 
+[project.optional-dependencies]
+ui = ["nicegui>=2.0", "plotly>=5.0"]
+
 [project.urls]
 Homepage = "https://ionis-ai.com/"
 Repository = "https://github.com/IONIS-AI/ionis-validate"

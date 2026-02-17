@@ -24,6 +24,7 @@ COMMANDS = {
     "adif":    "ionis_validate.tests.run_adif",
     "report":  "ionis_validate.tests.run_report",
     "info":    "ionis_validate.tests.run_info",
+    "ui":      "ionis_validate.ui.app",
 }
 
 USAGE = """\
@@ -39,6 +40,7 @@ Commands:
   adif       Validate the model against your ADIF QSO log
   report     Generate a beta test report for GitHub Issues
   info       Show model and system information
+  ui         Launch browser-based validation dashboard
 
 Examples:
   ionis-validate test
