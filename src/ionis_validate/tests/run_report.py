@@ -176,7 +176,6 @@ def generate_report(info, test_passed=None, test_output=None,
         lines.append(f"| **GPU** | {info['gpu']} (CUDA {info.get('cuda_version', '?')}) |")
 
     lines.append(f"| **OS** | {info.get('os_release', info.get('platform', '?'))} |")
-    lines.append(f"| **Hostname** | {info.get('hostname', '?')} |")
     lines.append(f"| **Install Token** | `{info.get('install_token', 'unknown')}` |")
     lines.append("")
 
