@@ -398,13 +398,21 @@ def build_adif_tab(model, config, checkpoint, device):
                         )
 
                     # Skipped summary
+                    skip_labels = {
+                        "no_grid": "Missing grid square",
+                        "no_band": "No recognized band",
+                        "bad_grid": "Invalid grid format",
+                        "non_hf": "Non-HF band",
+                        "no_solar": "Before 2000 (no solar data)",
+                    }
                     total_skipped = sum(skipped.values())
                     if total_skipped:
                         with ui.card().classes("w-full q-mt-sm"):
                             ui.label(f"Records skipped: {total_skipped:,}").classes("text-subtitle2")
                             for reason, count in skipped.items():
                                 if count > 0:
-                                    ui.label(f"  {reason}: {count:,}").classes("text-body2")
+                                    label = skip_labels.get(reason, reason)
+                                    ui.label(f"  {label}: {count:,}").classes("text-body2")
 
                     # Recall by mode
                     modes_seen = sorted(set(r["ionis_mode"] for r in results))

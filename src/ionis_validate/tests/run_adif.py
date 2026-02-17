@@ -167,7 +167,7 @@ def extract_observations(records):
     recognized HF band, are skipped with the reason noted.
     """
     observations = []
-    skipped = {"no_grid": 0, "no_band": 0, "bad_grid": 0, "non_hf": 0}
+    skipped = {"no_grid": 0, "no_band": 0, "bad_grid": 0, "non_hf": 0, "no_solar": 0}
 
     for rec in records:
         # Grid resolution — both must be in the log
@@ -232,6 +232,11 @@ def extract_observations(records):
                 month = int(date_str[4:6])
             except ValueError:
                 pass
+
+        # Solar lookup table starts 2000-01-01 — skip older QSOs
+        if year < 2000:
+            skipped["no_solar"] += 1
+            continue
 
         if len(time_str) >= 4:
             try:
