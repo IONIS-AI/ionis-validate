@@ -8,7 +8,7 @@ Usage:
   ionis-validate test
   ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m ...
   ionis-validate custom my_paths.json
-  ionis-validate adif my_log.adi --my-grid DN26
+  ionis-validate adif my_log.adi
   ionis-validate report
   ionis-validate info
 """
@@ -43,7 +43,7 @@ Commands:
 Examples:
   ionis-validate test
   ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6
-  ionis-validate adif my_log.adi --my-grid DN26
+  ionis-validate adif my_log.adi
   ionis-validate info
 
 https://github.com/IONIS-AI/ionis-validate

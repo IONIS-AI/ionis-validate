@@ -8,12 +8,14 @@ processing happens locally — callsigns are stripped immediately and
 never leave your machine.
 
 Usage:
-  ionis-validate adif my_log.adi --my-grid DN26
-  ionis-validate adif my_log.adi --my-grid DN26 --export observations.json
-  ionis-validate adif my_log.adi --my-grid DN26 --sfi 140 --kp 2
+  ionis-validate adif my_log.adi
+  ionis-validate adif my_log.adi --export observations.json
 
-Any QSO with valid grids and an HF band is measured against the model.
-Records missing required inputs (grid, band) are skipped.
+Both grids come from the log: MY_GRIDSQUARE (your grid) and GRIDSQUARE
+(their grid). Records missing either grid are skipped.
+
+Any QSO with valid grids (TX + RX) and an HF band is measured against
+the model. Records missing required inputs are skipped.
 
 For best results, export only confirmed QSOs (eQSL, LoTW, or paper QSL)
 from your logger. A confirmed QSL proves the contact happened and the
@@ -124,22 +126,22 @@ def parse_adif(filepath, encoding="utf-8"):
     return records
 
 
-def extract_observations(records, my_grid_default):
+def extract_observations(records):
     """Convert parsed ADIF records to anonymous observations.
 
     Returns list of dicts with: tx_grid, rx_grid, band_id, freq_mhz,
     mode, ionis_mode, hour_utc, month, year, snr_db (if available).
 
-    A record is included if it meets the model's input requirements:
-    valid TX grid, valid RX grid, and a recognized HF band. Records
-    missing any of these are skipped with the reason noted.
+    Both grids must come from the log: MY_GRIDSQUARE (TX) and
+    GRIDSQUARE (RX). Records missing either grid, or missing a
+    recognized HF band, are skipped with the reason noted.
     """
     observations = []
     skipped = {"no_grid": 0, "no_band": 0, "bad_grid": 0, "non_hf": 0}
 
     for rec in records:
-        # Grid resolution
-        my_grid = rec.get("my_gridsquare", my_grid_default)
+        # Grid resolution — both must be in the log
+        my_grid = rec.get("my_gridsquare")
         their_grid = rec.get("gridsquare")
 
         if not my_grid or not their_grid:
@@ -319,7 +321,7 @@ def run_predictions(observations, model, config, device, sfi_override=None,
     return results
 
 
-def print_report(results, skipped, filepath, my_grid, sfi, kp):
+def print_report(results, skipped, filepath, sfi, kp):
     """Print human-readable validation report."""
     total = len(results)
     if total == 0:
@@ -329,13 +331,25 @@ def print_report(results, skipped, filepath, my_grid, sfi, kp):
     open_count = sum(1 for r in results if r["band_open"])
     recall = 100.0 * open_count / total
 
+    # Summarize TX grids from log
+    from collections import Counter
+    tx_grids = Counter(r["tx_grid"] for r in results)
+
     print()
     print("=" * 70)
     print("  IONIS V20 — ADIF Log Validation")
     print("=" * 70)
     print()
     print(f"  Log file:      {os.path.basename(filepath)}")
-    print(f"  Your grid:     {my_grid}")
+    if len(tx_grids) == 1:
+        grid, count = next(iter(tx_grids.items()))
+        print(f"  TX grid:       {grid}")
+    else:
+        top = tx_grids.most_common(5)
+        grid_str = ", ".join(f"{g} ({c:,})" for g, c in top)
+        if len(tx_grids) > 5:
+            grid_str += f", ... ({len(tx_grids)} total)"
+        print(f"  TX grids:      {grid_str}")
     print(f"  Conditions:    SFI={sfi}, Kp={kp}")
     print()
 
@@ -453,11 +467,6 @@ def main():
         help="Path to your ADIF (.adi) log file",
     )
     parser.add_argument(
-        "--my-grid",
-        required=True,
-        help="Your 4-character Maidenhead grid (e.g., DN26)",
-    )
-    parser.add_argument(
         "--sfi", type=float, default=150.0,
         help="Solar Flux Index (default: 150)",
     )
@@ -479,18 +488,13 @@ def main():
         print(f"  ERROR: File not found: {args.adif_file}", file=sys.stderr)
         return 1
 
-    my_grid = args.my_grid.upper()[:4]
-    if not _GRID_RE.match(my_grid):
-        print(f"  ERROR: Invalid grid: {args.my_grid}", file=sys.stderr)
-        return 1
-
     # Parse ADIF (PII stripped at parse time)
     print(f"  Parsing {args.adif_file}...")
     records = parse_adif(args.adif_file, encoding=args.encoding)
     print(f"  Parsed {len(records):,} ADIF records")
 
     # Extract observations that meet model input requirements
-    observations, skipped = extract_observations(records, my_grid)
+    observations, skipped = extract_observations(records)
     print(f"  Extracted {len(observations):,} HF observations with valid grids")
 
     if not observations:
@@ -510,7 +514,7 @@ def main():
                               sfi_override=args.sfi, kp_override=args.kp)
 
     # Print report
-    print_report(results, skipped, args.adif_file, my_grid, args.sfi, args.kp)
+    print_report(results, skipped, args.adif_file, args.sfi, args.kp)
 
     # Export if requested
     if args.export:
