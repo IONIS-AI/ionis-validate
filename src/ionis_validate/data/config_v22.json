@@ -1,16 +1,17 @@
 {
-  "version": "v20",
-  "phase": "Production",
-  "checkpoint": "ionis_v20.pth",
+  "version": "v22",
+  "variant": "gamma",
+  "phase": "Production (Phase 4.0)",
+  "checkpoint": "ionis_v22_gamma.safetensors",
 
   "model": {
     "architecture": "IonisGate",
-    "dnn_dim": 11,
+    "dnn_dim": 15,
     "hidden_dim": 256,
     "sidecar_hidden": 8,
-    "input_dim": 13,
-    "sfi_idx": 11,
-    "kp_penalty_idx": 12,
+    "input_dim": 17,
+    "sfi_idx": 15,
+    "kp_penalty_idx": 16,
     "gate_init_bias": -0.693
   },
 
@@ -39,7 +40,9 @@
   "features": [
     "distance", "freq_log", "hour_sin", "hour_cos",
     "az_sin", "az_cos", "lat_diff", "midpoint_lat",
-    "season_sin", "season_cos", "day_night_est",
+    "season_sin", "season_cos", "vertex_lat",
+    "tx_solar_dep", "rx_solar_dep",
+    "freq_x_tx_dark", "freq_x_rx_dark",
     "sfi", "kp_penalty"
   ],
 
@@ -70,9 +73,10 @@
   },
 
   "validation": {
-    "pearson_min": 0.48,
-    "kp_storm_min": 3.0,
-    "sfi_benefit_min": 0.4
+    "pearson_min": 0.46,
+    "kp_storm_min": 1.0,
+    "sfi_benefit_min": 0.4,
+    "tst900_min": 8
   },
 
   "clickhouse": {

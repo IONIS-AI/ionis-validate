@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-run_custom.py — IONIS V20 Batch Custom Path Tests
+run_custom.py — IONIS V22-gamma Batch Custom Path Tests
 
 Run predictions for a set of user-defined paths from a JSON file.
+Includes PhysicsOverrideLayer and day_of_year support.
 
 Usage:
   python run_custom.py my_paths.json
@@ -15,38 +16,38 @@ JSON format:
     "paths": [
       {
         "tx_grid": "DN26", "rx_grid": "IO91", "band": "20m",
-        "hour": 14, "month": 6, "label": "KI7MT to G"
+        "hour": 14, "month": 6, "day_of_year": 172,
+        "label": "KI7MT to G"
       },
       {
         "tx_grid": "DN26", "rx_grid": "PM95", "band": "20m",
-        "hour": 6, "month": 12, "label": "KI7MT to JA",
+        "hour": 6, "month": 12, "day_of_year": 355,
+        "label": "KI7MT to JA",
         "expect_open": true, "mode": "CW"
       }
     ]
   }
 
-Per-path overrides for sfi/kp/hour/month take precedence over top-level
-"conditions" defaults. Optional "expect_open" (bool) triggers pass/fail
-against the specified "mode" threshold (default: WSPR).
+Per-path overrides for sfi/kp/hour/month/day_of_year take precedence over
+top-level "conditions" defaults. Optional "expect_open" (bool) triggers
+pass/fail against the specified "mode" threshold (default: WSPR).
 """
 
 import argparse
 import json
-import os
 import sys
 
-import numpy as np
 import torch
 
-
 from ionis_validate.model import (
-    IonisGate, get_device, load_model,
-    grid4_to_latlon, build_features, haversine_km, BAND_FREQ_HZ,
+    get_device, load_model,
+    grid4_to_latlon, build_features, haversine_km,
+    solar_elevation_deg, BAND_FREQ_HZ,
 )
+from ionis_validate.physics_override import apply_override_to_prediction
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-SIGMA_TO_DB = 6.7
 WSPR_MEAN_DB = -17.53
 WSPR_STD_DB = 6.7
 
@@ -59,16 +60,16 @@ MODE_THRESHOLDS_DB = {
     "SSB":    3.0,
 }
 
-# Modes shown as inline columns (RTTY omitted from compact table)
+# Modes shown as inline columns
 DISPLAY_MODES = ["WSPR", "FT8", "CW", "SSB"]
 
 # Table row format
 ROW_FMT = (
     "    {n:>3s}  {path:<13s}  {band:<4s}"
     "  {db:>6s}  {km:>7s}"
-    "  {sfi:>3s}  {kp:>3s}  {hour:>4s}  {mon:>3s}"
+    "  {sfi:>3s}  {kp:>3s}  {hour:>4s}  {mon:>3s}  {doy:>3s}"
     "  {wspr:>4s}  {ft8:>4s}  {cw:>4s}  {ssb:>4s}"
-    "  {result:>6s}"
+    "  {ovr:>3s}  {result:>6s}"
 )
 
 
@@ -85,16 +86,31 @@ def format_kp(kp):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="IONIS V20 — Batch custom path tests",
+        description="IONIS V22-gamma — Batch custom path tests with PhysicsOverrideLayer",
     )
-    parser.add_argument("json_file", help="Path to JSON file defining custom paths")
+    parser.add_argument("json_file", nargs="?", default=None,
+                        help="Path to JSON file defining custom paths")
+    parser.add_argument("--example", action="store_true",
+                        help="Run the bundled example (2 easy, 2 medium, 2 hard)")
     parser.add_argument("--config", default=None, help="Path to config JSON")
-    parser.add_argument("--checkpoint", default=None, help="Path to .pth file")
+    parser.add_argument("--checkpoint", default=None, help="Path to .safetensors file")
 
     args = parser.parse_args()
 
+    if args.example:
+        from ionis_validate import _data_path
+        json_path = _data_path("example_custom_paths.json")
+    elif args.json_file:
+        json_path = args.json_file
+    else:
+        print("  ERROR: Provide a JSON file or use --example\n")
+        print("  Usage:")
+        print("    ionis-validate custom my_paths.json")
+        print("    ionis-validate custom --example")
+        return 1
+
     # Load test spec
-    with open(args.json_file) as f:
+    with open(json_path) as f:
         spec = json.load(f)
 
     description = spec.get("description", "Custom paths")
@@ -107,17 +123,12 @@ def main():
 
     # Load model
     device = get_device()
-    config_path = args.config
-    if config_path is None:
-        from ionis_validate import _data_path
-        config_path = _data_path("config_v20.json")
-
-    model, config, checkpoint = load_model(config_path, args.checkpoint, device)
+    model, config, metadata = load_model(args.config, args.checkpoint, device)
 
     # Header
     print()
     print("=" * 70)
-    print("  IONIS V20 — Custom Path Tests")
+    print("  IONIS V22-gamma — Custom Path Tests")
     print("=" * 70)
     print(f"\n  {description}")
     print(f"  Device: {device}")
@@ -126,9 +137,9 @@ def main():
     # Table header
     hdr = ROW_FMT.format(
         n="#", path="Path", band="Band", db="dB", km="km",
-        sfi="SFI", kp="Kp", hour="Hour", mon="Mon",
+        sfi="SFI", kp="Kp", hour="Hour", mon="Mon", doy="DoY",
         wspr="WSPR", ft8="FT8", cw="CW", ssb="SSB",
-        result="Result",
+        ovr="OVR", result="Result",
     )
     print(hdr)
     sep_width = len(hdr)
@@ -150,6 +161,7 @@ def main():
         kp = p.get("kp", defaults.get("kp", 2))
         hour = p.get("hour", defaults.get("hour", 12))
         month = p.get("month", defaults.get("month", 6))
+        day_of_year = p.get("day_of_year", defaults.get("day_of_year", 172))
         expect_open = p.get("expect_open", None)
         test_mode = p.get("mode", "WSPR").upper()
 
@@ -163,25 +175,34 @@ def main():
                 n=str(i + 1), path=path_str, band=band,
                 db="—", km="—",
                 sfi=f"{sfi:.0f}", kp=format_kp(kp),
-                hour=str(hour), mon=str(month),
+                hour=str(hour), mon=str(month), doy=str(day_of_year),
                 wspr="—", ft8="—", cw="—", ssb="—",
-                result="SKIP",
+                ovr="—", result="SKIP",
             ))
             continue
 
         tx_lat, tx_lon = grid4_to_latlon(tx_grid)
         rx_lat, rx_lon = grid4_to_latlon(rx_grid)
         freq_hz = BAND_FREQ_HZ[band]
+        freq_mhz = freq_hz / 1e6
         distance_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
 
         features = build_features(
             tx_lat, tx_lon, rx_lat, rx_lon,
             freq_hz, sfi, kp, hour, month,
+            day_of_year=day_of_year,
+            include_solar_depression=True,
         )
         x = torch.tensor(features, dtype=torch.float32, device=device).unsqueeze(0)
 
         with torch.no_grad():
-            snr_sigma = model(x).item()
+            raw_sigma = model(x).item()
+
+        # PhysicsOverrideLayer
+        tx_solar = solar_elevation_deg(tx_lat, tx_lon, hour, day_of_year)
+        rx_solar = solar_elevation_deg(rx_lat, rx_lon, hour, day_of_year)
+        snr_sigma, was_overridden = apply_override_to_prediction(
+            raw_sigma, freq_mhz, tx_solar, rx_solar)
 
         snr_db = sigma_to_approx_db(snr_sigma)
 
@@ -189,6 +210,8 @@ def main():
         mode_cols = {}
         for m in DISPLAY_MODES:
             mode_cols[m] = "OPEN" if snr_db >= MODE_THRESHOLDS_DB[m] else "--"
+
+        ovr_str = "YES" if was_overridden else ""
 
         # Determine result
         if expect_open is not None:
@@ -211,10 +234,10 @@ def main():
             n=str(i + 1), path=path_str, band=band,
             db=f"{snr_db:+.1f}", km=f"{distance_km:,.0f}",
             sfi=f"{sfi:.0f}", kp=format_kp(kp),
-            hour=str(hour), mon=str(month),
+            hour=str(hour), mon=str(month), doy=str(day_of_year),
             wspr=mode_cols["WSPR"], ft8=mode_cols["FT8"],
             cw=mode_cols["CW"], ssb=mode_cols["SSB"],
-            result=status,
+            ovr=ovr_str, result=status,
         ))
 
     print(f"  {'─' * (sep_width - 2)}")

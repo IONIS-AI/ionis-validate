@@ -1,5 +1,5 @@
 """
-app.py — IONIS V20 Browser-based Validation Dashboard
+app.py — IONIS V22-gamma Browser-based Validation Dashboard
 
 Launches a NiceGUI app on localhost:8765 wrapping the existing
 ionis-validate runner functions. No model logic changes.
@@ -14,12 +14,6 @@ import sys
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-
-    if sys.version_info < (3, 10):
-        print()
-        print(f"  ERROR: The browser UI requires Python >= 3.10 (you have {sys.version.split()[0]})")
-        print()
-        return 1
 
     try:
         from nicegui import app, ui
@@ -43,8 +37,8 @@ def main():
 
     # Load model once at startup
     device = get_device()
-    model, config, checkpoint = load_model(device=device)
-    shared = (model, config, checkpoint, device)
+    model, config, metadata = load_model(device=device)
+    shared = (model, config, metadata, device)
 
     @ui.page("/")
     def index():
@@ -54,7 +48,7 @@ def main():
 
         # Header
         with ui.header().classes("items-center justify-between"):
-            ui.label("IONIS V20").classes("text-h6 font-bold")
+            ui.label("IONIS V22-gamma").classes("text-h6 font-bold")
             with ui.row().classes("items-center"):
                 ui.label("Dark mode").classes("text-body2")
                 ui.switch(on_change=lambda e: dark.set_value(e.value))
@@ -77,9 +71,9 @@ def main():
                 build_info_tab(*shared)
 
     print()
-    print("  IONIS V20 — Browser UI starting on http://0.0.0.0:8765")
+    print("  IONIS V22-gamma — Browser UI starting on http://0.0.0.0:8765")
     print("  Open http://<this-machine>:8765 in your browser")
     print()
 
-    ui.run(host="0.0.0.0", port=8765, title="IONIS V20", reload=False)
+    ui.run(host="0.0.0.0", port=8765, title="IONIS V22-gamma", reload=False)
     return 0

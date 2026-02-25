@@ -26,22 +26,23 @@ COMMANDS = {
 }
 
 USAGE = """\
-ionis-validate — IONIS V20 HF Propagation Model Validation Suite
+ionis-validate — IONIS V22-gamma + PhysicsOverrideLayer Validation Suite
 
 Usage:
   ionis-validate <command> [options]
 
 Commands:
-  test       Run the full 62-test validation suite
-  predict    Predict SNR for a single HF path
-  custom     Run batch predictions from a JSON file
+  test       Run the full 29-test validation suite (KI7MT + TST-900)
+  predict    Predict SNR for a single HF path (with PhysicsOverrideLayer)
+  custom     Run batch predictions from a JSON file (--example for demo)
   report     Generate a beta test report for GitHub Issues
   info       Show model and system information
   ui         Launch browser-based validation dashboard
 
 Examples:
   ionis-validate test
-  ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6
+  ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6 --day-of-year 172
+  ionis-validate custom --example
   ionis-validate custom my_paths.json
   ionis-validate info
 

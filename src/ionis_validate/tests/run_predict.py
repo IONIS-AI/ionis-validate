@@ -1,39 +1,35 @@
 #!/usr/bin/env python3
 """
-run_predict.py — IONIS V20 Single Path Prediction CLI
+run_predict.py — IONIS V22-gamma Single Path Prediction CLI
 
-Predict the SNR for a single HF propagation path.
+Predict the SNR for a single HF propagation path with PhysicsOverrideLayer.
 
 Usage:
-  python run_predict.py --tx-grid FN20 --rx-grid IO91 --band 20m \
-      --sfi 150 --kp 2 --hour 14 --month 6
+  ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m \
+      --sfi 150 --kp 2 --hour 14 --month 6 --day-of-year 172
 
-  ionis-validate predict --tx-grid DN26 --rx-grid IO91 --band 20m \
-      --sfi 140 --kp 1.5 --hour 14 --month 6
-
-Output includes predicted SNR in sigma and dB, plus per-mode verdicts
-(WSPR/FT8/CW/RTTY/SSB open/closed).
+  ionis-validate predict --tx-grid DN46 --rx-grid JN48 --band 10m \
+      --sfi 150 --kp 2 --hour 2 --month 2 --day-of-year 45
 """
 
 import argparse
-import os
 import sys
 
-import numpy as np
 import torch
 
-
 from ionis_validate.model import (
-    IonisGate, get_device, load_model,
-    grid4_to_latlon, build_features, haversine_km, BAND_FREQ_HZ,
+    get_device, load_model,
+    grid4_to_latlon, build_features, haversine_km,
+    solar_elevation_deg, BAND_FREQ_HZ,
 )
+from ionis_validate.physics_override import apply_override_to_prediction
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-SIGMA_TO_DB = 6.7  # Approximate sigma → dB conversion
+WSPR_MEAN_DB = -17.53  # 20m WSPR mean SNR
+WSPR_STD_DB = 6.7      # approximate std
 
 # Mode decode thresholds (dB relative to noise floor)
-# These represent typical minimum SNR for each mode to decode
 MODE_THRESHOLDS_DB = {
     "WSPR": -28.0,
     "FT8":  -21.0,
@@ -41,11 +37,6 @@ MODE_THRESHOLDS_DB = {
     "RTTY":  -5.0,
     "SSB":    3.0,
 }
-
-# WSPR normalization: mean and std from V20 training data (20m reference)
-# Model output is in Z-score units relative to WSPR distribution
-WSPR_MEAN_DB = -17.53  # 20m WSPR mean SNR
-WSPR_STD_DB = 6.7      # approximate std
 
 
 def sigma_to_approx_db(sigma):
@@ -63,12 +54,12 @@ def mode_verdicts(snr_db):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="IONIS V20 — Single path prediction",
+        description="IONIS V22-gamma — Single path prediction with PhysicsOverrideLayer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 examples:
-  %(prog)s --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6
-  %(prog)s --tx-grid DN26 --rx-grid PM95 --band 20m --sfi 140 --kp 1.5 --hour 6 --month 12
+  %(prog)s --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6 --day-of-year 172
+  %(prog)s --tx-grid DN46 --rx-grid JN48 --band 10m --sfi 150 --kp 2 --hour 2 --month 2 --day-of-year 45
 """,
     )
     parser.add_argument("--tx-grid", required=True, help="TX Maidenhead grid (4-char, e.g. FN20)")
@@ -79,8 +70,9 @@ examples:
     parser.add_argument("--kp", type=float, required=True, help="Kp index (0-9)")
     parser.add_argument("--hour", type=int, required=True, help="Hour UTC (0-23)")
     parser.add_argument("--month", type=int, required=True, help="Month (1-12)")
-    parser.add_argument("--config", default=None, help="Path to config JSON (default: auto-discover V20)")
-    parser.add_argument("--checkpoint", default=None, help="Path to .pth file (default: from config)")
+    parser.add_argument("--day-of-year", type=int, required=True, help="Day of year (1-366)")
+    parser.add_argument("--config", default=None, help="Path to config JSON (default: auto-discover V22)")
+    parser.add_argument("--checkpoint", default=None, help="Path to .safetensors file (default: from config)")
 
     args = parser.parse_args()
 
@@ -96,32 +88,41 @@ examples:
     if not (1 <= args.month <= 12):
         print(f"  ERROR: Month must be 1-12, got {args.month}", file=sys.stderr)
         return 1
+    if not (1 <= args.day_of_year <= 366):
+        print(f"  ERROR: Day-of-year must be 1-366, got {args.day_of_year}", file=sys.stderr)
+        return 1
 
     # Load model
     device = get_device()
-    config_path = args.config
-    if config_path is None:
-        from ionis_validate import _data_path
-        config_path = _data_path("config_v20.json")
-
-    model, config, checkpoint = load_model(config_path, args.checkpoint, device)
+    model, config, metadata = load_model(args.config, args.checkpoint, device)
 
     # Resolve grids
     tx_lat, tx_lon = grid4_to_latlon(args.tx_grid)
     rx_lat, rx_lon = grid4_to_latlon(args.rx_grid)
 
     freq_hz = BAND_FREQ_HZ[args.band]
+    freq_mhz = freq_hz / 1e6
     distance_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
 
-    # Build features and predict
+    # Build features and predict (V22: solar depression + cross-products)
     features = build_features(
         tx_lat, tx_lon, rx_lat, rx_lon,
         freq_hz, args.sfi, args.kp, args.hour, args.month,
+        day_of_year=args.day_of_year,
+        include_solar_depression=True,
     )
     x = torch.tensor(features, dtype=torch.float32, device=device).unsqueeze(0)
 
     with torch.no_grad():
-        snr_sigma = model(x).item()
+        raw_sigma = model(x).item()
+
+    # Solar elevation for override + display
+    tx_solar = solar_elevation_deg(tx_lat, tx_lon, args.hour, args.day_of_year)
+    rx_solar = solar_elevation_deg(rx_lat, rx_lon, args.hour, args.day_of_year)
+
+    # Apply PhysicsOverrideLayer
+    snr_sigma, was_overridden = apply_override_to_prediction(
+        raw_sigma, freq_mhz, tx_solar, rx_solar)
 
     snr_db = sigma_to_approx_db(snr_sigma)
     verdicts = mode_verdicts(snr_db)
@@ -129,17 +130,25 @@ examples:
     # Output
     print()
     print("=" * 60)
-    print("  IONIS V20 — Path Prediction")
+    print("  IONIS V22-gamma — Path Prediction")
     print("=" * 60)
     print()
     print(f"  TX Grid:    {args.tx_grid.upper()} ({tx_lat:.1f}N, {tx_lon:.1f}E)")
     print(f"  RX Grid:    {args.rx_grid.upper()} ({rx_lat:.1f}N, {rx_lon:.1f}E)")
     print(f"  Distance:   {distance_km:,.0f} km")
-    print(f"  Band:       {args.band} ({freq_hz/1e6:.3f} MHz)")
+    print(f"  Band:       {args.band} ({freq_mhz:.3f} MHz)")
     print(f"  Conditions: SFI {args.sfi:.0f}, Kp {args.kp:.1f}")
-    print(f"  Time:       {args.hour:02d}:00 UTC, month {args.month}")
+    print(f"  Time:       {args.hour:02d}:00 UTC, month {args.month}, day {args.day_of_year}")
     print()
-    print(f"  Predicted SNR: {snr_sigma:+.3f} sigma ({snr_db:+.1f} dB)")
+    print(f"  TX Solar:   {tx_solar:+.1f} deg")
+    print(f"  RX Solar:   {rx_solar:+.1f} deg")
+    print()
+    print(f"  Raw Model:  {raw_sigma:+.3f} sigma")
+    if was_overridden:
+        print(f"  Override:   FIRED (clamped to {snr_sigma:+.3f} sigma)")
+    else:
+        print(f"  Override:   not triggered")
+    print(f"  Final SNR:  {snr_sigma:+.3f} sigma ({snr_db:+.1f} dB)")
     print()
     print("  Mode Verdicts:")
     for mode, verdict in verdicts.items():

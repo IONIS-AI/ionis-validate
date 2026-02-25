@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run_report.py — IONIS V20 Beta Test Report Generator
+run_report.py — IONIS V22-gamma Beta Test Report Generator
 
 Generates a structured markdown report for pasting into a GitHub Issue.
 Collects system info, runs the test suite, and optionally runs custom
@@ -23,8 +23,9 @@ from datetime import datetime, timezone
 
 import torch
 
-
 from ionis_validate.model import IonisGate, get_device
+from ionis_validate.physics_override import PhysicsOverrideLayer
+from ionis_validate import _data_path
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -37,7 +38,7 @@ def generate_install_token(checkpoint_path):
     installs from drive-by troll submissions.
     """
     h = hashlib.sha256()
-    h.update(b"ionis-v20-beta")
+    h.update(b"ionis-v22-gamma")
     if os.path.exists(checkpoint_path):
         with open(checkpoint_path, "rb") as f:
             h.update(f.read(512))
@@ -48,8 +49,7 @@ def generate_install_token(checkpoint_path):
 
 def collect_system_info():
     """Collect system and model information."""
-    from ionis_validate import _data_path
-    config_path = _data_path("config_v20.json")
+    config_path = _data_path("config_v22.json")
     if not os.path.exists(config_path):
         return {"error": f"Config not found: {config_path}"}
 
@@ -64,14 +64,18 @@ def collect_system_info():
         sidecar_hidden=config["model"]["sidecar_hidden"],
         sfi_idx=config["model"]["sfi_idx"],
         kp_penalty_idx=config["model"]["kp_penalty_idx"],
+        gate_init_bias=config["model"].get("gate_init_bias"),
     )
     param_count = sum(p.numel() for p in model.parameters())
 
+    override = PhysicsOverrideLayer()
+
     info = {
-        "version": config.get("version", "unknown"),
+        "version": f"{config.get('version', 'unknown')}-{config.get('variant', '')}",
         "phase": config.get("phase", "unknown"),
         "architecture": config["model"].get("architecture", "IonisGate"),
         "parameters": param_count,
+        "override": override.describe(),
         "python": sys.version.split()[0],
         "pytorch": torch.__version__,
         "device": str(device),
@@ -90,14 +94,20 @@ def collect_system_info():
     except FileNotFoundError:
         info["os_release"] = f"{platform.system()} {platform.release()}"
 
-    # Checkpoint info
+    # Checkpoint info (safetensors metadata from companion JSON)
     if os.path.exists(checkpoint_path):
         size_bytes = os.path.getsize(checkpoint_path)
         info["checkpoint_size"] = f"{size_bytes / 1024:.0f} KB"
-        cp = torch.load(checkpoint_path, weights_only=False, map_location="cpu")
-        info["checkpoint_pearson"] = cp.get("val_pearson")
-        info["checkpoint_rmse"] = cp.get("val_rmse")
-        info["checkpoint_epoch"] = cp.get("epoch")
+
+        meta_path = checkpoint_path.replace(".safetensors", "_meta.json")
+        if os.path.exists(meta_path):
+            with open(meta_path) as f:
+                metadata = json.load(f)
+            info["checkpoint_pearson"] = metadata.get("val_pearson")
+            info["checkpoint_rmse"] = metadata.get("val_rmse")
+            info["checkpoint_epoch"] = metadata.get("epoch")
+            info["tst_900"] = metadata.get("tst_900_score")
+            info["ki7mt"] = metadata.get("ki7mt_hard_pass")
     else:
         info["checkpoint_size"] = "NOT FOUND"
 
@@ -150,7 +160,7 @@ def generate_report(info, test_passed=None, test_output=None,
     lines = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    lines.append("## IONIS V20 Beta Test Report")
+    lines.append("## IONIS V22-gamma Beta Test Report")
     lines.append(f"*Generated: {now}*")
     lines.append("")
 
@@ -161,13 +171,18 @@ def generate_report(info, test_passed=None, test_output=None,
     lines.append("|---|---|")
     lines.append(f"| **Model** | {info.get('version', '?')} ({info.get('phase', '?')}) |")
     lines.append(f"| **Architecture** | {info.get('architecture', '?')} ({info.get('parameters', '?'):,} params) |")
+    lines.append(f"| **Override** | {info.get('override', 'N/A')} |")
 
     if info.get("checkpoint_pearson") is not None:
         lines.append(f"| **Pearson** | {info['checkpoint_pearson']:+.4f} |")
     if info.get("checkpoint_rmse") is not None:
         lines.append(f"| **RMSE** | {info['checkpoint_rmse']:.4f} sigma |")
+    if info.get("tst_900"):
+        lines.append(f"| **TST-900** | {info['tst_900']} |")
+    if info.get("ki7mt"):
+        lines.append(f"| **KI7MT** | {info['ki7mt']} |")
 
-    lines.append(f"| **Checkpoint** | {info.get('checkpoint_size', '?')} |")
+    lines.append(f"| **Checkpoint** | {info.get('checkpoint_size', '?')} (safetensors) |")
     lines.append(f"| **Python** | {info.get('python', '?')} |")
     lines.append(f"| **PyTorch** | {info.get('pytorch', '?')} |")
     lines.append(f"| **Device** | {info.get('device', '?')} |")

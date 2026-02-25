@@ -1,5 +1,5 @@
-"""IONIS V20 HF Propagation Model — Validation Suite"""
-__version__ = "0.3.0"
+"""IONIS V22-gamma + PhysicsOverrideLayer — HF Propagation Model Validation Suite"""
+__version__ = "4.0.0"
 
 import os as _os
 

@@ -1,22 +1,23 @@
 [project]
 name = "ionis-validate"
-version = "0.3.0"
-description = "IONIS V20 — HF Propagation Model Validation Suite"
+version = "4.0.0"
+description = "IONIS V22-gamma + PhysicsOverrideLayer — HF Propagation Model Validation Suite"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
 authors = [{name = "Greg Beam, KI7MT"}]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "torch>=2.0",
     "numpy>=1.24",
+    "safetensors>=0.4",
 ]
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Physics",
 ]

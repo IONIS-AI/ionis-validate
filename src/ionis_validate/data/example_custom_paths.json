@@ -1,0 +1,75 @@
+{
+  "description": "Example custom paths — 2 easy, 2 medium, 2 hard",
+  "conditions": {
+    "sfi": 150,
+    "kp": 2
+  },
+  "paths": [
+    {
+      "label": "Easy: 20m NA-EU midday summer",
+      "tx_grid": "FN31",
+      "rx_grid": "IO91",
+      "band": "20m",
+      "hour": 14,
+      "month": 6,
+      "day_of_year": 172,
+      "expect_open": true,
+      "mode": "FT8"
+    },
+    {
+      "label": "Easy: 40m domestic NA night",
+      "tx_grid": "DN13",
+      "rx_grid": "EM73",
+      "band": "40m",
+      "hour": 4,
+      "month": 1,
+      "day_of_year": 15,
+      "expect_open": true,
+      "mode": "FT8"
+    },
+    {
+      "label": "Medium: 15m NA-JA winter midday",
+      "tx_grid": "CN87",
+      "rx_grid": "PM95",
+      "band": "15m",
+      "hour": 22,
+      "month": 12,
+      "day_of_year": 355,
+      "expect_open": true,
+      "mode": "FT8"
+    },
+    {
+      "label": "Medium: 20m NA-VK evening",
+      "tx_grid": "FM18",
+      "rx_grid": "QF56",
+      "band": "20m",
+      "hour": 10,
+      "month": 3,
+      "day_of_year": 80,
+      "expect_open": true
+    },
+    {
+      "label": "Hard: 10m EU night — override should fire",
+      "tx_grid": "DN46",
+      "rx_grid": "JN48",
+      "band": "10m",
+      "hour": 2,
+      "month": 2,
+      "day_of_year": 45,
+      "expect_open": false,
+      "mode": "FT8"
+    },
+    {
+      "label": "Hard: 160m transatlantic winter night",
+      "tx_grid": "FN42",
+      "rx_grid": "IO81",
+      "band": "160m",
+      "hour": 3,
+      "month": 1,
+      "day_of_year": 15,
+      "sfi": 80,
+      "kp": 1,
+      "expect_open": true
+    }
+  ]
+}
