@@ -1,6 +1,6 @@
 [project]
 name = "ionis-validate"
-version = "4.0.2"
+version = "4.0.3"
 description = "IONIS V22-gamma + PhysicsOverrideLayer — HF Propagation Model Validation Suite"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
