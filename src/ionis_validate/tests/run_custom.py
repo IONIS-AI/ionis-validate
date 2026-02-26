@@ -202,7 +202,7 @@ def main():
         tx_solar = solar_elevation_deg(tx_lat, tx_lon, hour, day_of_year)
         rx_solar = solar_elevation_deg(rx_lat, rx_lon, hour, day_of_year)
         snr_sigma, was_overridden = apply_override_to_prediction(
-            raw_sigma, freq_mhz, tx_solar, rx_solar)
+            raw_sigma, freq_mhz, tx_solar, rx_solar, distance_km=distance_km)
 
         snr_db = sigma_to_approx_db(snr_sigma)
 

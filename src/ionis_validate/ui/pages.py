@@ -84,8 +84,9 @@ def build_predict_tab(model, config, metadata, device):
                     tx_lat, tx_lon, int(hour.value), int(day_of_year.value))
                 rx_solar = solar_elevation_deg(
                     rx_lat, rx_lon, int(hour.value), int(day_of_year.value))
+                dist_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
                 snr_sigma, was_overridden = apply_override_to_prediction(
-                    raw_sigma, freq_mhz, tx_solar, rx_solar)
+                    raw_sigma, freq_mhz, tx_solar, rx_solar, distance_km=dist_km)
 
                 snr_db = sigma_to_approx_db(snr_sigma)
                 verdicts = mode_verdicts(snr_db)
@@ -276,7 +277,7 @@ def build_custom_tab(model, config, metadata, device):
                 tx_solar = solar_elevation_deg(tx_lat, tx_lon, path_hour, path_doy)
                 rx_solar = solar_elevation_deg(rx_lat, rx_lon, path_hour, path_doy)
                 snr_sigma, was_overridden = apply_override_to_prediction(
-                    raw_sigma, freq_mhz, tx_solar, rx_solar)
+                    raw_sigma, freq_mhz, tx_solar, rx_solar, distance_km=distance_km)
 
                 snr_db = sigma_to_approx_db(snr_sigma)
 

@@ -122,7 +122,7 @@ examples:
 
     # Apply PhysicsOverrideLayer
     snr_sigma, was_overridden = apply_override_to_prediction(
-        raw_sigma, freq_mhz, tx_solar, rx_solar)
+        raw_sigma, freq_mhz, tx_solar, rx_solar, distance_km=distance_km)
 
     snr_db = sigma_to_approx_db(snr_sigma)
     verdicts = mode_verdicts(snr_db)
